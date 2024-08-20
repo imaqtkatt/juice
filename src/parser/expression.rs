@@ -26,7 +26,7 @@ impl<'src> Parser<'src> {
         self.expect(TokenKind::RParens)?;
         Ok(expression)
       }
-      _ => panic!(),
+      _ => self.unexpected(),
     }
   }
 
@@ -120,7 +120,7 @@ impl<'src> Parser<'src> {
       TokenKind::Star => Operation::Mul,
       TokenKind::Slash => Operation::Div,
       TokenKind::EqualsEquals => Operation::Eql,
-      _ => todo!("Expected operator"),
+      _ => return self.unexpected(),
     };
     self.eat();
     Ok(operation)
@@ -129,7 +129,8 @@ impl<'src> Parser<'src> {
   pub fn expression(&mut self) -> ParseResult<Expression> {
     match self.curr.kind {
       TokenKind::Case => self.case(),
-      TokenKind::Let => self.r#let(),
+      TokenKind::If => self.r#if(),
+      TokenKind::Try => self.r#try(),
       _ => self.infix(0),
     }
   }
@@ -161,18 +162,53 @@ impl<'src> Parser<'src> {
       patterns.push(self.pattern()?);
     }
     self.expect(TokenKind::Arrow)?;
-    let rhs = self.in_block(Self::expression)?;
+    let rhs = self.in_block(Self::r#let)?;
     Ok(Arm { lhs: patterns, rhs })
   }
 
-  fn r#let(&mut self) -> ParseResult<Expression> {
-    self.expect(TokenKind::Let)?;
-    let lhs = self.pattern()?;
+  pub fn r#let(&mut self) -> ParseResult<Expression> {
+    if self.curr.kind == TokenKind::Let {
+      self.expect(TokenKind::Let)?;
+      let lhs = self.pattern()?;
+      self.expect(TokenKind::Equals)?;
+      let rhs = self.expression()?;
+      self.expect_one_of(&[TokenKind::VSep, TokenKind::Semicolon])?;
+      let next = self.r#let()?;
+      Ok(Expression::Assignment(lhs, Box::new(rhs), Box::new(next)))
+    } else {
+      self.expression()
+    }
+  }
+
+  fn r#if(&mut self) -> ParseResult<Expression> {
+    self.expect(TokenKind::If)?;
+    let condition = self.expression()?;
+    self.expect(TokenKind::Then)?;
+    let then_branch = self.in_block(Self::r#let)?;
+    self.expect(TokenKind::Else)?;
+    let else_branch = self.in_block(Self::r#let)?;
+    Ok(Expression::If(
+      Box::new(condition),
+      Box::new(then_branch),
+      Box::new(else_branch),
+    ))
+  }
+
+  fn r#try(&mut self) -> ParseResult<Expression> {
+    self.expect(TokenKind::Try)?;
+    let pat = self.pattern()?;
     self.expect(TokenKind::Equals)?;
-    let rhs = self.expression()?;
-    self.expect_one_of(&[TokenKind::VSep, TokenKind::Semicolon])?;
-    let next = self.expression()?;
-    Ok(Expression::Assignment(lhs, Box::new(rhs), Box::new(next)))
+    let expression = self.expression()?;
+    self.expect(TokenKind::Then)?;
+    let then_branch = self.in_block(Self::r#let)?;
+    self.expect(TokenKind::Else)?;
+    let else_branch = self.in_block(Self::r#let)?;
+    Ok(Expression::Try(
+      pat,
+      Box::new(expression),
+      Box::new(then_branch),
+      Box::new(else_branch),
+    ))
   }
 }
 
@@ -192,7 +228,7 @@ case tup of
 end
 "#;
     let mut parser = Parser::new(Lexer::new(input));
-    let e = parser.expression();
+    let e = parser.r#let();
     match e {
       Ok(e) => println!("{e:?}"),
       Err(e) => eprintln!("{e}"),

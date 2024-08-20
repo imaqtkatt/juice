@@ -1,11 +1,15 @@
-use crate::ast::Program;
+use crate::{ast::Module, lexer::TokenKind};
 
 use super::{ParseResult, Parser};
 
 impl<'src> Parser<'src> {
-  pub fn program(&mut self) -> ParseResult<Program> {
+  pub fn program(&mut self) -> ParseResult<Module> {
+    self.expect(TokenKind::Module)?;
+    let module_name = self.expect(TokenKind::Identifier)?;
+    let name = module_name.lexeme;
+
     let mut fun_definitions = indexmap::IndexMap::new();
-    while !self.is(crate::lexer::TokenKind::Eof) {
+    while !self.is(TokenKind::Eof) {
       let fun_definition = self.fun_definition()?;
       match fun_definitions.entry(fun_definition.name.clone()) {
         indexmap::map::Entry::Occupied(_) => {
@@ -19,8 +23,11 @@ impl<'src> Parser<'src> {
         }
       }
     }
-    self.expect(crate::lexer::TokenKind::Eof)?;
-    Ok(Program { fun_definitions })
+    self.expect(TokenKind::Eof)?;
+    Ok(Module {
+      name,
+      fun_definitions,
+    })
   }
 }
 
@@ -31,6 +38,8 @@ mod test {
   #[test]
   fn parse_program() {
     let input = r#"
+module main
+
 fun main() do
   batata({1, 2})
 end
@@ -52,6 +61,7 @@ end
   #[test]
   fn parse_redefinition() {
     let input = r#"
+module main
 fun main() do
   batata({1, 2})
 end
@@ -71,6 +81,7 @@ end
   #[test]
   fn parse_wrong_clause() {
     let input = r#"
+module main
 fun foo() do
   1
 fun bar() do

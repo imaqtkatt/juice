@@ -15,6 +15,8 @@ pub enum Expression {
   Binary(Operation, Box<Expression>, Box<Expression>),
   Call(Box<Expression>, Vec<Expression>),
   Case(Vec<Expression>, Vec<Arm>),
+  If(Box<Expression>, Box<Expression>, Box<Expression>),
+  Try(Pattern, Box<Expression>, Box<Expression>, Box<Expression>),
 }
 
 #[derive(Debug)]
@@ -63,7 +65,8 @@ pub struct FunClause {
 }
 
 #[derive(Debug)]
-pub struct Program {
+pub struct Module {
+  pub name: String,
   pub fun_definitions: indexmap::IndexMap<String, FunDefinition>,
 }
 

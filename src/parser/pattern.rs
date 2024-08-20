@@ -15,7 +15,7 @@ impl<'src> Parser<'src> {
       TokenKind::Atom => self.pat_atom(),
       TokenKind::LBrace => self.pat_tuple(),
       TokenKind::LBracket => self.pat_list(),
-      _ => Err("Expected pattern".to_string()),
+      _ => self.unexpected(),
     }
   }
 

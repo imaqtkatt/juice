@@ -32,6 +32,11 @@ pub enum TokenKind {
   Of,
   End,
   Let,
+  If,
+  Then,
+  Else,
+  Try,
+  Module,
   Arrow,
   Error,
   Eof,
@@ -98,7 +103,6 @@ impl<'src> Lexer<'src> {
   }
 
   fn skip_whitespaces(&mut self) {
-    self.start = self.index;
     self.advance_while(|c| c.is_ascii_whitespace());
   }
 
@@ -161,7 +165,12 @@ impl<'src> Lexer<'src> {
         Some(last_column) if column > *last_column => (),
         Some(last_column) if column < *last_column => {
           self.pop_layout();
+          // if column <= self.layout.last().copied().unwrap_or_default() {
           return (TokenKind::VEnd, String::new());
+          // } else {
+          // println!("column = {column}");
+          // panic!()
+          // }
         }
         Some(_) => return (TokenKind::VSep, String::new()),
       }
@@ -232,6 +241,17 @@ impl<'src> Lexer<'src> {
               TokenKind::Of
             }
             "let" => TokenKind::Let,
+            "if" => TokenKind::If,
+            "then" => {
+              self.push_state();
+              TokenKind::Then
+            }
+            "else" => {
+              self.push_state();
+              TokenKind::Else
+            }
+            "try" => TokenKind::Try,
+            "module" => TokenKind::Module,
             _ => TokenKind::Identifier,
           }
         }
@@ -320,6 +340,11 @@ impl std::fmt::Display for TokenKind {
       TokenKind::Of => write!(f, "of"),
       TokenKind::End => write!(f, "end"),
       TokenKind::Let => write!(f, "let"),
+      TokenKind::If => write!(f, "if"),
+      TokenKind::Then => write!(f, "then"),
+      TokenKind::Else => write!(f, "else"),
+      TokenKind::Try => write!(f, "try"),
+      TokenKind::Module => write!(f, "module"),
       TokenKind::Arrow => write!(f, "->"),
       TokenKind::Error => write!(f, "Error"),
       TokenKind::Eof => write!(f, "Eof"),

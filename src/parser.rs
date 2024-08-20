@@ -69,4 +69,8 @@ impl<'src> Parser<'src> {
     }
     Ok(())
   }
+
+  pub fn unexpected<T>(&mut self) -> ParseResult<T> {
+    Err(format!("Unexpected '{}'", self.curr.lexeme))
+  }
 }

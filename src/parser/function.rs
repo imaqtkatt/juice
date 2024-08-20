@@ -39,7 +39,7 @@ impl<'src> Parser<'src> {
     }
     self.expect(TokenKind::RParens)?;
     self.expect(TokenKind::Do)?;
-    let body = self.in_block(Self::expression)?;
+    let body = self.in_block(Self::r#let)?;
     Ok(FunClause { patterns, body })
   }
 }
