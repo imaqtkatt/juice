@@ -6,7 +6,7 @@ use crate::{
   report::{self, Reporter},
 };
 
-struct UnboundVariable(String);
+struct UnboundVariable(String, Option<String>);
 
 impl report::Diagnostic for UnboundVariable {
   fn severity(&self) -> report::Severity {
@@ -16,6 +16,16 @@ impl report::Diagnostic for UnboundVariable {
   fn message(&self) -> String {
     format!("Unbound variable '{}'.", self.0)
   }
+
+  fn hint(&self) -> Option<String> {
+    if let Some(name) = &self.1 {
+      Some(format!(
+        "A similar variable '{name}' is available in scope."
+      ))
+    } else {
+      None
+    }
+  }
 }
 
 struct Context<'a> {
@@ -24,11 +34,8 @@ struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-  fn new(reporter: &'a Reporter) -> Self {
-    Self {
-      scope: HashMap::new(),
-      reporter,
-    }
+  fn new(reporter: &'a Reporter, scope: HashMap<&'a String, usize>) -> Self {
+    Self { scope, reporter }
   }
 
   fn push(&mut self, name: &'a String) {
@@ -46,6 +53,10 @@ impl<'a> Context<'a> {
       std::collections::hash_map::Entry::Vacant(_) => unreachable!(),
     }
   }
+
+  fn report(&self, diagnostic: UnboundVariable) {
+    self.reporter.report(diagnostic);
+  }
 }
 
 type Scope<'a> = HashMap<&'a String, usize>;
@@ -56,7 +67,8 @@ impl Expression {
       Expression::Var(name) => {
         if context.scope.contains_key(name) {
         } else {
-          context.reporter.report(UnboundVariable(name.clone()));
+          let most_similar = find_most_similar_string(context.scope.keys().cloned(), name);
+          context.report(UnboundVariable(name.clone(), most_similar.cloned()));
         }
       }
       Expression::Literal(lit) => match lit {
@@ -130,7 +142,7 @@ impl FunDefinition {
     for p in self.parameters.iter() {
       scope.insert(p, 1);
     }
-    let mut context = Context::new(reporter);
+    let mut context = Context::new(reporter, scope);
     self.body.check_unbound_variables(&mut context);
   }
 }
@@ -141,4 +153,85 @@ impl Module {
       fun.check_unbound_variables(repoter);
     }
   }
+}
+
+fn find_most_similar_string<'a>(
+  set: impl Iterator<Item = &'a String>,
+  target: &String,
+) -> Option<&'a String> {
+  let mut last = 0.;
+  let mut most_similar = None;
+  for s in set {
+    let sim = jaro(target, s);
+    if sim > 0.7 && sim > last {
+      most_similar = Some(s);
+    } else {
+      last = sim;
+    }
+  }
+  most_similar
+}
+
+fn jaro(s1: &str, s2: &str) -> f64 {
+  let len1 = s1.chars().count();
+  let len2 = s2.chars().count();
+
+  if len1 == 0 || len2 == 0 {
+    return 0.0;
+  }
+
+  let match_distance = len1.max(len2) / 2 - 1;
+
+  let mut s1_matches = vec![false; len1];
+  let mut s2_matches = vec![false; len2];
+
+  let mut matches = 0;
+  let mut transpositions = 0;
+
+  for (i, c1) in s1.chars().enumerate() {
+    let start = i.saturating_sub(match_distance);
+    let end = (i + match_distance + 1).min(len2);
+
+    if start >= end {
+      continue;
+    }
+
+    for j in start..end {
+      let c2 = s2.chars().nth(j).unwrap();
+      if s2_matches[j] || c1 != c2 {
+        continue;
+      }
+
+      s1_matches[i] = true;
+      s2_matches[j] = true;
+      matches += 1;
+      break;
+    }
+  }
+
+  if matches == 0 {
+    return 0.0;
+  }
+
+  let mut k = 0;
+  for (i, c1) in s1.chars().enumerate() {
+    if !s1_matches[i] {
+      continue;
+    }
+
+    while !s2_matches[k] {
+      k += 1;
+    }
+
+    if c1 != s2.chars().nth(k).unwrap() {
+      transpositions += 1;
+    }
+
+    k += 1;
+  }
+
+  let matches = matches as f64;
+  let transpositions = transpositions as f64 / 2.0;
+
+  ((matches / len1 as f64) + (matches / len2 as f64) + ((matches - transpositions) / matches)) / 3.0
 }
